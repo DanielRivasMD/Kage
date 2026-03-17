@@ -26,6 +26,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"sync"
 	"time"
 
@@ -72,6 +74,8 @@ func GetRootCmd() *cobra.Command {
 		horus.CheckErr(err)
 
 		rootCmd.PersistentFlags().BoolVarP(&rootFlags.verbose, "verbose", "v", false, "Enable verbose diagnostics")
+		rootCmd.PersistentFlags().BoolVarP(&rootFlags.copyOut, "out", "o", false, "Copy stdout to clipboard")
+		rootCmd.PersistentFlags().BoolVarP(&rootFlags.copyErr, "err", "e", false, "Copy stderr to clipboard")
 		rootCmd.DisableFlagParsing = true
 		rootCmd.Version = VERSION
 
@@ -90,6 +94,8 @@ func Execute() {
 
 type rootFlag struct {
 	verbose bool
+	copyOut bool
+	copyErr bool
 }
 
 var (
@@ -110,6 +116,46 @@ func BuildCommands() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// stripANSI removes ANSI color escape sequences from a string.
+func stripANSI(s string) string {
+	return ansiRegex.ReplaceAllString(s, "")
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func copyToClipboard(data []byte, verbose bool) {
+	if len(data) == 0 {
+		if verbose {
+			fmt.Fprintln(os.Stderr, "No data to copy to clipboard")
+		}
+		return
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		cmd = exec.Command("copyq", "copy", "-")
+	default:
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Clipboard copy not supported on %s\n", runtime.GOOS)
+		}
+		return
+	}
+
+	cmd.Stdin = bytes.NewReader(data)
+	if err := cmd.Run(); err != nil {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Warning: failed to copy to clipboard: %v\n", err)
+		}
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 func runRoot(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		cmd.Help()
@@ -118,6 +164,8 @@ func runRoot(cmd *cobra.Command, args []string) {
 
 	filteredArgs := []string{}
 	verbose := false
+	copyOut := false
+	copyErr := false
 	stopParsing := false
 
 	for i := 0; i < len(args); i++ {
@@ -133,6 +181,10 @@ func runRoot(cmd *cobra.Command, args []string) {
 			stopParsing = true
 		case "-v", "--verbose":
 			verbose = true
+		case "-o", "--out":
+			copyOut = true
+		case "-e", "--err":
+			copyErr = true
 		case "-h", "--help":
 			cmd.Help()
 			os.Exit(0)
@@ -145,6 +197,8 @@ func runRoot(cmd *cobra.Command, args []string) {
 	}
 
 	rootFlags.verbose = verbose
+	rootFlags.copyOut = copyOut
+	rootFlags.copyErr = copyErr
 
 	if len(filteredArgs) == 0 {
 		cmd.Help()
@@ -162,16 +216,23 @@ func runRoot(cmd *cobra.Command, args []string) {
 	err := c.Run()
 
 	exitCode := 0
+	startupErrMsg := ""
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
-			exitCode = -1
+			exitCode = 1
+			startupErrMsg = fmt.Sprintf("failed to start command: %v", err)
+			stderrBuf.WriteString(startupErrMsg)
+			// Always print startup error to stderr so the user sees it.
+			fmt.Fprintln(os.Stderr, startupErrMsg)
 		}
 	}
 
-	saveOutput(command, commandArgs, exitCode, stdoutBuf.Bytes(), stderrBuf.Bytes(), verbose)
+	// Save raw output (ANSI stripped) to log file.
+	logPath := saveOutput(command, commandArgs, exitCode, stdoutBuf.Bytes(), stderrBuf.Bytes(), verbose)
 
+	// If command failed, generate a horus error report and append it to the log.
 	if err != nil {
 		const maxErrLen = 1024
 		stderrSample := stderrBuf.String()
@@ -190,11 +251,47 @@ func runRoot(cmd *cobra.Command, args []string) {
 				"stderr":  stderrSample,
 			},
 		)
-		horus.CheckErr(wrappedErr)
+
+		var report string
+		if herr, ok := wrappedErr.(*horus.Herror); ok {
+			report = horus.PseudoJSONFormatter(herr)
+			report = stripANSI(report)
+		} else {
+			report = wrappedErr.Error()
+		}
+
+		// Append the report to the log file.
+		if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+			defer f.Close()
+			fmt.Fprintf(f, "\n--- HORUS ERROR REPORT ---\n%s\n", report)
+		} else if verbose {
+			fmt.Fprintf(os.Stderr, "Warning: could not append error report to log: %v\n", err)
+		}
 	}
+
+	// Clipboard handling: copy raw stderr/stdout (ANSI stripped) as requested.
+	if copyOut {
+		stripped := stripANSI(stdoutBuf.String())
+		copyToClipboard([]byte(stripped), verbose)
+	}
+	stderrCopied := false
+	if copyErr {
+		stripped := stripANSI(stderrBuf.String())
+		copyToClipboard([]byte(stripped), verbose)
+		stderrCopied = true
+	}
+	if exitCode != 0 && !stderrCopied {
+		// On failure, automatically copy raw stderr (unless already copied by -e).
+		stripped := stripANSI(stderrBuf.String())
+		copyToClipboard([]byte(stripped), verbose)
+	}
+
+	// Exit with the command's exit code (or 1 for startup failure).
+	os.Exit(exitCode)
 }
 
-func saveOutput(command string, args []string, exitCode int, stdout, stderr []byte, verbose bool) {
+// saveOutput writes the captured output to a file in ~/.kage/logs/ and returns the full path.
+func saveOutput(command string, args []string, exitCode int, stdout, stderr []byte, verbose bool) string {
 	home, err := domovoi.FindHome(verbose)
 	if err != nil {
 		horus.CheckErr(err, horus.WithOp("save output"), horus.WithMessage("failed to find home directory"))
@@ -221,13 +318,14 @@ func saveOutput(command string, args []string, exitCode int, stdout, stderr []by
 	fmt.Fprintf(file, "Time: %s\n", time.Now().Format(time.RFC3339))
 	fmt.Fprintf(file, "Exit Code: %d\n", exitCode)
 	fmt.Fprintf(file, "\n--- STDOUT ---\n")
-	file.Write(stdout)
+	file.Write([]byte(stripANSI(string(stdout))))
 	fmt.Fprintf(file, "\n--- STDERR ---\n")
-	file.Write(stderr)
+	file.Write([]byte(stripANSI(string(stderr))))
 
 	if verbose {
 		fmt.Printf("Output saved to %s\n", fullPath)
 	}
+	return fullPath
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
