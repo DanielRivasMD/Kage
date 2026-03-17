@@ -66,14 +66,16 @@ func GetRootCmd() *cobra.Command {
 	onceRoot.Do(func() {
 		d := horus.Must(domovoi.GlobalDocs())
 		var err error
-		rootCmd, err = d.MakeCmd("root", runRoot,
+		rootCmd, err = d.MakeCmd("root", nil,
 			domovoi.WithArgs(cobra.MinimumNArgs(1)),
 		)
 		horus.CheckErr(err)
 
 		rootCmd.PersistentFlags().BoolVarP(&rootFlags.verbose, "verbose", "v", false, "Enable verbose diagnostics")
+		rootCmd.DisableFlagParsing = true
 		rootCmd.Version = VERSION
 
+		rootCmd.Run = runRoot
 	})
 	return rootCmd
 }
@@ -109,15 +111,51 @@ func BuildCommands() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func runRoot(cmd *cobra.Command, args []string) {
-	verbose := rootFlags.verbose
+	if len(args) == 0 {
+		cmd.Help()
+		os.Exit(0)
+	}
 
-	command := args[0]
-	commandArgs := args[1:]
+	filteredArgs := []string{}
+	verbose := false
+	stopParsing := false
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if stopParsing {
+			filteredArgs = append(filteredArgs, arg)
+			continue
+		}
+
+		switch arg {
+		case "--":
+			stopParsing = true
+		case "-v", "--verbose":
+			verbose = true
+		case "-h", "--help":
+			cmd.Help()
+			os.Exit(0)
+		case "--version":
+			fmt.Println(cmd.Version)
+			os.Exit(0)
+		default:
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+
+	rootFlags.verbose = verbose
+
+	if len(filteredArgs) == 0 {
+		cmd.Help()
+		os.Exit(1)
+	}
+
+	command := filteredArgs[0]
+	commandArgs := filteredArgs[1:]
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-
 	c := exec.Command(command, commandArgs...)
-
 	c.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
 	c.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 
@@ -140,7 +178,6 @@ func runRoot(cmd *cobra.Command, args []string) {
 		if len(stderrSample) > maxErrLen {
 			stderrSample = stderrSample[:maxErrLen] + "... (truncated)"
 		}
-
 		wrappedErr := horus.PropagateErr(
 			"run command",
 			"command_execution_error",
