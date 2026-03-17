@@ -15,11 +15,22 @@
     ]
   },
   "root": {
-    "use": "kage",
-    "long": "",
+    "use": "kage <command> [args...]",
+    "long": "Run a command and capture its output",
     "example_usages": [
       [
-        "help"
+        "echo",
+        "'hello world'"
+      ],
+      [
+        "--verbose",
+        "ls",
+        "-la"
+      ],
+      [
+        "sh",
+        "-c",
+        "echo 'complex command' && false"
       ]
     ]
   }
