@@ -25,11 +25,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"regexp"
-	"runtime"
 	"sync"
-	"time"
 
 	"github.com/DanielRivasMD/domovoi"
 	"github.com/DanielRivasMD/horus"
@@ -66,20 +62,17 @@ func InitDocs() {
 
 func GetRootCmd() *cobra.Command {
 	onceRoot.Do(func() {
-		d := horus.Must(domovoi.GlobalDocs())
-		var err error
-		rootCmd, err = d.MakeCmd("root", nil,
+		cmd := horus.Must(horus.Must(domovoi.GlobalDocs()).MakeCmd("root", runRoot,
 			domovoi.WithArgs(cobra.MinimumNArgs(1)),
-		)
-		horus.CheckErr(err)
+		))
 
-		rootCmd.PersistentFlags().BoolVarP(&rootFlags.verbose, "verbose", "v", false, "Enable verbose diagnostics")
-		rootCmd.PersistentFlags().BoolVarP(&rootFlags.copyOut, "out", "o", false, "Copy stdout to clipboard")
-		rootCmd.PersistentFlags().BoolVarP(&rootFlags.copyErr, "err", "e", false, "Copy stderr to clipboard")
-		rootCmd.DisableFlagParsing = true
-		rootCmd.Version = VERSION
+		cmd.PersistentFlags().BoolVarP(&rootFlags.verbose, "verbose", "v", false, "Enable verbose diagnostics")
+		cmd.PersistentFlags().BoolVarP(&rootFlags.copyOut, "out", "o", false, "Copy stdout to clipboard")
+		cmd.PersistentFlags().BoolVarP(&rootFlags.copyErr, "err", "e", false, "Copy stderr to clipboard")
+		cmd.DisableFlagParsing = true
+		cmd.Version = VERSION
 
-		rootCmd.Run = runRoot
+		rootCmd = cmd
 	})
 	return rootCmd
 }
@@ -112,46 +105,6 @@ func BuildCommands() {
 		CompletionCmd(),
 		IdentityCmd(),
 	)
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-// stripANSI removes ANSI color escape sequences from a string.
-func stripANSI(s string) string {
-	return ansiRegex.ReplaceAllString(s, "")
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-func copyToClipboard(data []byte, verbose bool) {
-	if len(data) == 0 {
-		if verbose {
-			fmt.Fprintln(os.Stderr, "No data to copy to clipboard")
-		}
-		return
-	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("copyq", "copy", "-")
-	default:
-		if verbose {
-			fmt.Fprintf(os.Stderr, "Clipboard copy not supported on %s\n", runtime.GOOS)
-		}
-		return
-	}
-
-	cmd.Stdin = bytes.NewReader(data)
-	if err := cmd.Run(); err != nil {
-		if verbose {
-			fmt.Fprintf(os.Stderr, "Warning: failed to copy to clipboard: %v\n", err)
-		}
-	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -288,44 +241,6 @@ func runRoot(cmd *cobra.Command, args []string) {
 
 	// Exit with the command's exit code (or 1 for startup failure).
 	os.Exit(exitCode)
-}
-
-// saveOutput writes the captured output to a file in ~/.kage/logs/ and returns the full path.
-func saveOutput(command string, args []string, exitCode int, stdout, stderr []byte, verbose bool) string {
-	home, err := domovoi.FindHome(verbose)
-	if err != nil {
-		horus.CheckErr(err, horus.WithOp("save output"), horus.WithMessage("failed to find home directory"))
-	}
-
-	logDir := filepath.Join(home, ".kage", "logs")
-	if err := domovoi.CreateDir(logDir, verbose); err != nil {
-		horus.CheckErr(err, horus.WithOp("save output"), horus.WithMessage("failed to create log directory"))
-	}
-
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	baseCmd := filepath.Base(command)
-	filename := fmt.Sprintf("%s_%s.log", timestamp, baseCmd)
-	fullPath := filepath.Join(logDir, filename)
-
-	file, err := os.Create(fullPath)
-	if err != nil {
-		horus.CheckErr(err, horus.WithOp("save output"), horus.WithMessage("failed to create log file"),
-			horus.WithDetails(map[string]any{"path": fullPath}))
-	}
-	defer file.Close()
-
-	fmt.Fprintf(file, "Command: %s %v\n", command, args)
-	fmt.Fprintf(file, "Time: %s\n", time.Now().Format(time.RFC3339))
-	fmt.Fprintf(file, "Exit Code: %d\n", exitCode)
-	fmt.Fprintf(file, "\n--- STDOUT ---\n")
-	file.Write([]byte(stripANSI(string(stdout))))
-	fmt.Fprintf(file, "\n--- STDERR ---\n")
-	file.Write([]byte(stripANSI(string(stderr))))
-
-	if verbose {
-		fmt.Printf("Output saved to %s\n", fullPath)
-	}
-	return fullPath
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
