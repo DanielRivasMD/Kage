@@ -1,4 +1,8 @@
 review readme
 
+add zsh function wrapper generator
+add a flag to copy the last line of code to clipboard
+what about compatibility with julia repl?
+
 ==================================================
 ==================================================
