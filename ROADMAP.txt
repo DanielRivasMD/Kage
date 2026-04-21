@@ -5,4 +5,6 @@ add a flag to copy the last line of code to clipboard
 what about compatibility with julia repl?
 
 ==================================================
+cmd/root.go
+  line 37     TODO   update documentation
 ==================================================
