@@ -3,6 +3,7 @@ review readme
 add zsh function wrapper generator
 add a flag to copy the last line of code to clipboard
 what about compatibility with julia repl?
+make it compatible with piping so it is easier to collect the outputs as well
 
 ==================================================
 cmd/root.go
