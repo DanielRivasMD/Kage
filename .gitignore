@@ -1,1 +1,5 @@
-.todor
+# executables
+/target
+
+# deprecated
+deprecated
