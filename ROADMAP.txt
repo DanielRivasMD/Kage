@@ -1,11 +1,18 @@
 review readme
 
-add zsh function wrapper generator
-add a flag to copy the last line of code to clipboard
+add zsh function wrapper generator => this used to run the last command, however, now it should be built in
+add a flag to copy the last line of code to clipboard, not output
 what about compatibility with julia repl?
 make it compatible with piping so it is easier to collect the outputs as well
 
+triple functionality:
+1) on demand capture => kage -- CMD
+2) repeat last command => kage
+3) watcher => watchexec -w src -- kage -- cargo build
+
+
+
 ==================================================
-cmd/root.go
-  line 37     TODO   update documentation
+src/main.rs
+  line 238    FIX    temporary value issue: store the PathBuf in a variable
 ==================================================
