@@ -3,7 +3,7 @@
 pub mod completion {
 
     use anyhow::Result as anyResult;
-    use clap::{Command, CommandFactory};
+    use clap::{Command, CommandFactory, arg};
     use clap_complete::{generate, shells::*};
     use std::io;
 
@@ -16,7 +16,11 @@ pub mod completion {
             .cloned()
             .collect();
 
-        let mut cmd = Command::new(env!("CARGO_BIN_NAME")).subcommands(visible);
+        let mut cmd = Command::new(env!("CARGO_BIN_NAME"))
+            .subcommands(visible)
+            .arg(arg!(-v --verbose "Enable verbose diagnostics"))
+            .arg(arg!(-o --out      "Copy stdout to clipboard"))
+            .arg(arg!(-e --err      "Copy stderr to clipboard"));
 
         let name = cmd.get_name().to_string();
 
