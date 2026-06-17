@@ -12,21 +12,18 @@ mod util;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 fn main() {
-    // Attempt to parse as the completion subcommand first
-    if let Ok(sub) = cli::SubCommand::try_parse_from(std::env::args_os().take_while(|a| a != "--"))
-    {
-        match sub {
-            cli::SubCommand::Completions { shell } => {
-                let mut cmd = cli::Cli::command();
-                let bin_name = cmd.get_name().to_string();
-                generate(shell, &mut cmd, bin_name, &mut io::stdout());
-                return;
-            }
-        }
-    }
-
     let cli = cli::Cli::parse();
 
+    // If a subcommand was given, handle it and exit.
+    if let Some(cli::Command::Completion { shell }) = cli.cmd {
+        let mut cmd = cli::Cli::command();
+        let bin_name = cmd.get_name().to_string();
+        generate(shell, &mut cmd, bin_name, &mut io::stdout());
+        return;
+    }
+
+    // clap ensures `command` is non‑empty here because of `required_unless_present`,
+    // but we keep the check as a safeguard.
     if cli.command.is_empty() {
         eprintln!("Error: no command provided after --");
         std::process::exit(1);
@@ -41,14 +38,6 @@ fn main() {
     let exit_code = match exit_status.code() {
         Some(code) => code,
         None => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                let signal = exit_status.signal().unwrap_or(0);
-                eprintln!("Command terminated by signal: {signal}");
-                signal + 128
-            }
-            #[cfg(not(unix))]
             {
                 eprintln!("Command terminated abnormally");
                 1
@@ -59,11 +48,10 @@ fn main() {
     // Strip ANSI sequences from the captured bytes
     let stripped_stdout = util::strip_ansi_bytes(&stdout_bytes);
     let stripped_stderr = util::strip_ansi_bytes(&stderr_bytes);
-    // Convert to strings for clipboard
     let stdout_text = String::from_utf8_lossy(&stripped_stdout);
     let stderr_text = String::from_utf8_lossy(&stripped_stderr);
 
-    // Log output (discard returned path; function handles verbose print)
+    // Log output
     util::save_output(
         cmd_name,
         cmd_args,
