@@ -1,7 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use clap::{Parser, Subcommand, ValueHint};
-use clap_complete::Shell;
+use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -26,9 +25,8 @@ pub struct Cli {
     #[arg(short = 'e', long)]
     pub err: bool,
 
-    /// Subcommand (e.g., completions)
     #[command(subcommand)]
-    pub cmd: Option<Command>,
+    pub command: Option<Command>,
 
     /// The command to execute and its arguments
     #[arg(
@@ -38,19 +36,34 @@ pub struct Cli {
         num_args = 1..,
         required = true
     )]
-    pub command: Vec<String>,
+    pub cmd: Vec<String>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Generate shell completion script
+    /// Print identity
+    #[command(hide = true)]
+    Identity,
+
+    /// Generate shell completions
+    #[command(hide = true)]
     Completion {
         /// Shell for which to generate completions
         #[arg(value_enum)]
         shell: Shell,
     },
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    PowerShell,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
