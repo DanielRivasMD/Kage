@@ -28,7 +28,7 @@ pub mod completion {
             cli::Shell::Bash => generate(Bash, &mut cmd, name, &mut io::stdout()),
             cli::Shell::Zsh => generate(Zsh, &mut cmd, name, &mut io::stdout()),
             cli::Shell::Fish => generate(Fish, &mut cmd, name, &mut io::stdout()),
-            cli::Shell::PowerShell => generate(PowerShell, &mut cmd, name, &mut io::stdout()),
+            cli::Shell::Powershell => generate(PowerShell, &mut cmd, name, &mut io::stdout()),
         }
         Ok(())
     }
