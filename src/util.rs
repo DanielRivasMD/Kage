@@ -172,9 +172,7 @@ pub fn copy_text(text: &str, verbose: bool) {
     match Clipboard::new() {
         Ok(mut clipboard) => {
             if let Err(e) = clipboard.set_text(text) {
-                if verbose {
-                    eprintln!("Warning: failed to set clipboard: {}", e);
-                }
+                eprintln!("Warning: failed to set clipboard: {}", e);
             }
         }
         Err(e) => {
