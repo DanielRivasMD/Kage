@@ -1,18 +1,23 @@
 review readme
 
-add zsh function wrapper generator => this used to run the last command, however, now it should be built in
-add a flag to copy the last line of code to clipboard, not output
-what about compatibility with julia repl?
-make it compatible with piping so it is easier to collect the outputs as well
 
-triple functionality:
-1) on demand capture => kage -- CMD
-2) repeat last command => kage
-3) watcher => watchexec -w src -- kage -- cargo build
+multiple functionality:
+1) on demand capture => kage -- CMD => DONE
+
+2) repeat last command => kage => WIP
+add zsh function wrapper generator => this used to run the last command, however, now it should be built in
+
+3) watcher => watchexec -w src -- kage -- cargo build => write script & docs
+
+4) add a flag to copy the last line of code to clipboard, not output => ie, kage --copy | kage -c
+
+5) make it compatible with piping so it is easier to collect the outputs as well?
+
+6) what about compatibility with julia repl?
 
 
 
 ==================================================
-src/main.rs
-  line 238    FIX    temporary value issue: store the PathBuf in a variable
+src/util.rs
+  line 129    FIX    temporary value issue: store the PathBuf in a variable
 ==================================================
