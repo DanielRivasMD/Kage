@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use clap::{Parser, ValueHint};
+use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -10,7 +10,8 @@ use clap_complete::Shell;
     name = "kage",
     version = "0.1.0",
     about = "Run a command and capture its output",
-    after_long_help = "Examples:\n  kage -- echo hello world\n  kage --verbose -- ls -la\n  kage -- sh -c \"echo 'complex command' && false\""
+    after_long_help = "Examples:\n  kage -- echo hello world\n  kage --verbose -- ls -la\n  kage -- sh -c \"echo 'complex command' && false\"",
+    subcommand_negates_reqs = true
 )]
 pub struct Cli {
     /// Enable verbose diagnostics
@@ -25,6 +26,10 @@ pub struct Cli {
     #[arg(short = 'e', long)]
     pub err: bool,
 
+    /// Subcommand (e.g., completions)
+    #[command(subcommand)]
+    pub cmd: Option<Command>,
+
     /// The command to execute and its arguments
     #[arg(
         value_hint = ValueHint::CommandWithArguments,
@@ -38,11 +43,12 @@ pub struct Cli {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Parser, Debug)]
-pub enum SubCommand {
+#[derive(Debug, Subcommand)]
+pub enum Command {
     /// Generate shell completion script
-    Completions {
-        /// Shell to generate completions for
+    Completion {
+        /// Shell for which to generate completions
+        #[arg(value_enum)]
         shell: Shell,
     },
 }
