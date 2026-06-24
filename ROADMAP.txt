@@ -6,6 +6,7 @@ multiple functionality:
 
 2) repeat last command => kage => WIP
 add zsh function wrapper generator => this used to run the last command, however, now it should be built in
+what about keeping temporary files of the last commands status (stdout & stderr) per shell launched?
 
 3) watcher => watchexec -w src -- kage -- cargo build => write script & docs
 
